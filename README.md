@@ -101,4 +101,4 @@ All flight data currently lives in `src/data/flights.ts` and conforms to a singl
 
 ## License
 
-Released under the MIT License. Free to use as a learning reference or starting point.
+Released under the [MIT License](./LICENSE) © 2026 Muhammad Shahbaz. Free to use as a learning reference or starting point.
