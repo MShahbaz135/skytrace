@@ -1,55 +1,65 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, SlidersHorizontal, Plane, List, X } from 'lucide-react'
-import { FLIGHTS, STATUS_META, type FlightStatus } from '@/data/flights'
+import type { AircraftState, FlightPhase } from '@skytrace/shared'
+import { useLiveAircraft } from '@/hooks/useLiveAircraft'
+import { PHASE_META, PHASE_ORDER, matchesQuery, toAircraftView } from '@/lib/aircraft-view'
 import { FlightMap } from '@/components/map/FlightMap'
 import { FlightCard } from '@/components/flights/FlightCard'
 import { FlightDetailPanel } from '@/components/flights/FlightDetailPanel'
-import { cn } from '@/lib/utils'
+import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
+import { cn, formatNumber } from '@/lib/utils'
 
-const FILTERS: Array<{ value: FlightStatus | 'all'; label: string }> = [
+const FILTERS: Array<{ value: FlightPhase | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
-  { value: 'en-route', label: 'En route' },
-  { value: 'boarding', label: 'Boarding' },
-  { value: 'delayed', label: 'Delayed' },
-  { value: 'landed', label: 'Landed' },
+  ...PHASE_ORDER.map((phase) => ({ value: phase, label: PHASE_META[phase].label })),
 ]
 
+/**
+ * A busy viewport holds thousands of aircraft. The map draws them all, but the sidebar is
+ * DOM and would choke, so it shows a bounded slice and says so.
+ */
+const MAX_LISTED = 150
+
 export function LivePage() {
+  const { aircraft, interpolator, status, connected, setViewport } = useLiveAircraft()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FlightStatus | 'all'>('all')
+  const [filter, setFilter] = useState<FlightPhase | 'all'>('all')
   const [listOpen, setListOpen] = useState(false)
 
-  const flights = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return FLIGHTS.filter((f) => {
-      const matchesFilter = filter === 'all' || f.status === filter
-      const matchesQuery =
-        !q ||
-        f.flightNumber.toLowerCase().includes(q) ||
-        f.airline.toLowerCase().includes(q) ||
-        f.origin.city.toLowerCase().includes(q) ||
-        f.destination.city.toLowerCase().includes(q) ||
-        f.origin.iata.toLowerCase().includes(q) ||
-        f.destination.iata.toLowerCase().includes(q)
-      return matchesFilter && matchesQuery
-    })
-  }, [query, filter])
+  const states = useMemo(() => {
+    const map = new Map<string, AircraftState>()
+    for (const [icao24, tracked] of aircraft) map.set(icao24, tracked.state)
+    return map
+  }, [aircraft])
 
-  const selected = useMemo(
-    () => FLIGHTS.find((f) => f.id === selectedId) ?? null,
-    [selectedId],
-  )
+  const matching = useMemo(() => {
+    const views = []
+    for (const tracked of aircraft.values()) {
+      const view = toAircraftView(tracked)
+      if (filter !== 'all' && view.phase !== filter) continue
+      if (!matchesQuery(view, query)) continue
+      views.push(view)
+    }
+    // Sorted by label rather than by enrichment state, so rows do not jump around as
+    // adsbdb answers arrive.
+    views.sort((a, b) => a.label.localeCompare(b.label))
+    return views
+  }, [aircraft, filter, query])
 
-  const handleSelect = (id: string) => {
-    setSelectedId(id)
-    setListOpen(false)
+  const listed = matching.slice(0, MAX_LISTED)
+
+  const selectedTracked = selectedId ? (aircraft.get(selectedId) ?? null) : null
+  const selectedView = selectedTracked ? toAircraftView(selectedTracked) : null
+
+  const handleSelect = (icao24: string | null) => {
+    setSelectedId(icao24)
+    if (icao24) setListOpen(false)
   }
 
   return (
     <div className="fixed inset-0 top-0 flex pt-[72px]">
-      {/* Sidebar / list */}
       <aside
         className={cn(
           'absolute inset-y-0 top-[72px] z-30 flex w-full max-w-sm flex-col border-r border-white/8 bg-ink-900/95 backdrop-blur-xl transition-transform duration-300 lg:static lg:translate-x-0 lg:bg-ink-900/60',
@@ -59,9 +69,12 @@ export function LivePage() {
         <div className="border-b border-white/8 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-white">Live flights</h1>
+              <h1 className="text-lg font-bold text-white">Live aircraft</h1>
               <p className="text-xs text-muted">
-                <span className="text-signal">{flights.length}</span> aircraft matching
+                <span className="text-signal">{formatNumber(matching.length)}</span> in view
+                {aircraft.size !== matching.length && (
+                  <> of {formatNumber(aircraft.size)} tracked</>
+                )}
               </p>
             </div>
             <button
@@ -78,7 +91,7 @@ export function LivePage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search flight, city or airport…"
+              placeholder="Callsign, registration, airline, airport…"
               className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-muted-dim focus:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
             />
           </div>
@@ -104,56 +117,71 @@ export function LivePage() {
         </div>
 
         <div className="flex-1 space-y-2.5 overflow-y-auto p-4">
-          {flights.length === 0 ? (
+          {listed.length === 0 ? (
             <div className="grid place-items-center py-16 text-center">
               <Plane className="size-8 text-muted-dim" />
-              <p className="mt-3 text-sm text-muted">No flights match your search.</p>
+              <p className="mt-3 text-sm text-muted">
+                {aircraft.size === 0
+                  ? 'Waiting for the first position update…'
+                  : 'No aircraft match your search.'}
+              </p>
             </div>
           ) : (
-            flights.map((flight) => (
-              <FlightCard
-                key={flight.id}
-                flight={flight}
-                active={flight.id === selectedId}
-                onClick={() => handleSelect(flight.id)}
-              />
-            ))
+            <>
+              {listed.map((view) => (
+                <FlightCard
+                  key={view.icao24}
+                  view={view}
+                  active={view.icao24 === selectedId}
+                  onClick={() => handleSelect(view.icao24)}
+                />
+              ))}
+              {matching.length > listed.length && (
+                <p className="py-3 text-center text-xs text-muted-dim">
+                  Showing {formatNumber(listed.length)} of {formatNumber(matching.length)}. Zoom
+                  in or search to narrow the list.
+                </p>
+              )}
+            </>
           )}
         </div>
       </aside>
 
-      {/* Map */}
       <main className="relative flex-1">
         <FlightMap
-          flights={flights}
+          states={states}
+          interpolator={interpolator}
+          selected={selectedTracked}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={handleSelect}
+          onViewportChange={setViewport}
           className="size-full"
         />
 
-        {/* Legend */}
+        <div className="pointer-events-none absolute right-4 top-4 z-[400] flex justify-end">
+          <ConnectionStatus connected={connected} status={status} />
+        </div>
+
         <div className="pointer-events-none absolute bottom-4 left-4 z-[400] hidden items-center gap-4 rounded-xl glass px-4 py-2.5 text-xs text-muted sm:flex">
-          {(['en-route', 'boarding', 'delayed', 'landed'] as FlightStatus[]).map((s) => (
-            <span key={s} className="flex items-center gap-1.5">
-              <span className={cn('size-2 rounded-full', STATUS_META[s].dot)} />
-              {STATUS_META[s].label}
+          {PHASE_ORDER.map((phase) => (
+            <span key={phase} className="flex items-center gap-1.5">
+              <span className={cn('size-2 rounded-full', PHASE_META[phase].dot)} />
+              {PHASE_META[phase].label}
             </span>
           ))}
         </div>
 
-        {/* Mobile open-list button */}
         <button
           type="button"
           onClick={() => setListOpen(true)}
           className="absolute left-4 top-4 z-[400] flex items-center gap-2 rounded-xl glass-strong px-4 py-2.5 text-sm font-semibold text-white shadow-lg lg:hidden"
         >
           <List className="size-4" />
-          Flights ({flights.length})
+          Aircraft ({formatNumber(matching.length)})
         </button>
 
-        {/* Detail panel */}
         <AnimatePresence>
-          {selected && (
+          {selectedView && (
             <motion.div
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
@@ -161,7 +189,7 @@ export function LivePage() {
               transition={{ type: 'spring', stiffness: 260, damping: 28 }}
               className="absolute inset-y-4 right-4 z-[450] w-[calc(100%-2rem)] max-w-sm overflow-hidden rounded-3xl glass-strong shadow-2xl shadow-black/50 sm:w-96"
             >
-              <FlightDetailPanel flight={selected} onClose={() => setSelectedId(null)} />
+              <FlightDetailPanel view={selectedView} onClose={() => setSelectedId(null)} />
             </motion.div>
           )}
         </AnimatePresence>

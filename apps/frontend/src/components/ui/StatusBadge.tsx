@@ -1,14 +1,16 @@
-import { STATUS_META, type FlightStatus } from '@/data/flights'
+import type { FlightPhase } from '@skytrace/shared'
+import { PHASE_META } from '@/lib/aircraft-view'
 import { cn } from '@/lib/utils'
 
 export function StatusBadge({
-  status,
+  phase,
   className,
 }: {
-  status: FlightStatus
+  phase: FlightPhase
   className?: string
 }) {
-  const meta = STATUS_META[status]
+  const meta = PHASE_META[phase]
+
   return (
     <span
       className={cn(
@@ -18,7 +20,7 @@ export function StatusBadge({
       )}
     >
       <span className="relative flex size-1.5">
-        {status === 'en-route' && (
+        {phase !== 'on-ground' && (
           <span
             className={cn('absolute inline-flex size-full rounded-full opacity-75', meta.dot)}
             style={{ animation: 'pulse-ring 1.6s ease-out infinite' }}

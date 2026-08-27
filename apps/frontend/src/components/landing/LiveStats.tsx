@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { GLOBAL_STATS } from '@/data/flights'
 import { formatCompact } from '@/lib/utils'
 
-function AnimatedCounter({ value }: { value: number }) {
+function AnimatedCounter({ value }: { value: number | null }) {
   const ref = useRef<HTMLSpanElement>(null)
   const inView = useInView(ref, { once: true, margin: '-60px' })
   const [display, setDisplay] = useState(0)
 
   useEffect(() => {
-    if (!inView) return
+    if (!inView || value === null) return
     const duration = 1400
     const start = performance.now()
     let raf = 0
@@ -23,21 +22,28 @@ function AnimatedCounter({ value }: { value: number }) {
     return () => cancelAnimationFrame(raf)
   }, [inView, value])
 
-  return <span ref={ref}>{formatCompact(display)}</span>
+  return <span ref={ref}>{value === null ? '—' : formatCompact(display)}</span>
 }
 
-const STATS = [
-  { value: GLOBAL_STATS.flightsTracked, label: 'Flights tracked live', suffix: '+' },
-  { value: GLOBAL_STATS.airportsCovered, label: 'Airports covered', suffix: '+' },
-  { value: GLOBAL_STATS.airlines, label: 'Airlines monitored', suffix: '+' },
-  { value: GLOBAL_STATS.countries, label: 'Countries & regions', suffix: '' },
-]
+export interface CoverageStats {
+  aircraft: number | null
+  airlines: number | null
+  countries: number | null
+  airports: number | null
+}
 
-export function LiveStats() {
+export function LiveStats({ stats }: { stats: CoverageStats }) {
+  const items = [
+    { value: stats.aircraft, label: 'Aircraft tracked now' },
+    { value: stats.airlines, label: 'Airlines in view' },
+    { value: stats.countries, label: 'Countries of origin' },
+    { value: stats.airports, label: 'Airports on known routes' },
+  ]
+
   return (
     <section className="relative border-y border-white/5 bg-ink-900/40">
       <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px px-4 sm:px-6 lg:grid-cols-4">
-        {STATS.map((stat, i) => (
+        {items.map((stat, i) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 16 }}
@@ -48,7 +54,6 @@ export function LiveStats() {
           >
             <p className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
               <AnimatedCounter value={stat.value} />
-              <span className="text-gradient">{stat.suffix}</span>
             </p>
             <p className="mt-2 text-sm text-muted">{stat.label}</p>
           </motion.div>

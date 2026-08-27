@@ -1,14 +1,27 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, MousePointerClick } from 'lucide-react'
-import { FLIGHTS } from '@/data/flights'
+import type { AircraftState } from '@skytrace/shared'
+import type { LiveFeed } from '@/hooks/useLiveAircraft'
+import type { AircraftView } from '@/lib/aircraft-view'
 import { FlightMap } from '@/components/map/FlightMap'
 import { FlightCard } from '@/components/flights/FlightCard'
+import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
 
-export function MapShowcase() {
-  const [selectedId, setSelectedId] = useState<string | null>(FLIGHTS[0].id)
-  const preview = FLIGHTS.slice(0, 4)
+export function MapShowcase({ feed, views }: { feed: LiveFeed; views: AircraftView[] }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const states = useMemo(() => {
+    const map = new Map<string, AircraftState>()
+    for (const [icao24, tracked] of feed.aircraft) map.set(icao24, tracked.state)
+    return map
+  }, [feed.aircraft])
+
+  // A handful of aircraft with resolved routes make the best preview cards.
+  const preview = useMemo(() => views.filter((view) => view.route).slice(0, 4), [views])
+
+  const selectedTracked = selectedId ? (feed.aircraft.get(selectedId) ?? null) : null
 
   return (
     <section id="coverage" className="relative scroll-mt-24 py-24">
@@ -22,8 +35,8 @@ export function MapShowcase() {
               The whole sky, on one screen
             </h2>
             <p className="mt-4 text-lg text-muted">
-              Pan, zoom, and tap any aircraft to reveal its route and live telemetry. Try it right
-              here.
+              Pan, zoom, and tap any aircraft to reveal its route and live telemetry. This map
+              is the real thing — every plane on it is airborne right now.
             </p>
           </div>
           <Link
@@ -44,26 +57,38 @@ export function MapShowcase() {
         >
           <div className="relative h-[460px] overflow-hidden rounded-3xl border border-white/10">
             <FlightMap
-              flights={FLIGHTS}
+              states={states}
+              interpolator={feed.interpolator}
+              selected={selectedTracked}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              onViewportChange={feed.setViewport}
               className="size-full"
             />
             <div className="pointer-events-none absolute left-4 top-4 z-[400] flex items-center gap-2 rounded-full glass px-3 py-1.5 text-xs text-muted">
               <MousePointerClick className="size-3.5 text-accent" />
               Tap a plane to track it
             </div>
+            <div className="pointer-events-none absolute right-4 top-4 z-[400]">
+              <ConnectionStatus connected={feed.connected} status={feed.status} />
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">
-            {preview.map((flight) => (
-              <FlightCard
-                key={flight.id}
-                flight={flight}
-                active={flight.id === selectedId}
-                onClick={() => setSelectedId(flight.id)}
-              />
-            ))}
+            {preview.length === 0 ? (
+              <div className="grid h-full place-items-center rounded-2xl border border-white/8 bg-white/[0.02] p-6 text-center text-sm text-muted">
+                Resolving aircraft and routes…
+              </div>
+            ) : (
+              preview.map((view) => (
+                <FlightCard
+                  key={view.icao24}
+                  view={view}
+                  active={view.icao24 === selectedId}
+                  onClick={() => setSelectedId(view.icao24)}
+                />
+              ))
+            )}
           </div>
         </motion.div>
       </div>

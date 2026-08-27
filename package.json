@@ -9,13 +9,20 @@
   "scripts": {
     "dev": "npm run dev --workspace frontend",
     "dev:frontend": "npm run dev --workspace frontend",
-    "dev:backend": "npm run start:dev --workspace backend",
-    "build": "npm run build --workspaces --if-present",
+    "dev:backend": "npm run build:shared && npm run start:dev --workspace backend",
+    "build": "npm run build:shared && npm run build:frontend && npm run build:backend",
+    "build:shared": "npm run build --workspace @skytrace/shared",
     "build:frontend": "npm run build --workspace frontend",
     "build:backend": "npm run build --workspace backend",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "record:fixture": "node scripts/record-fixture.mjs",
+    "fixture:demo": "node scripts/generate-demo-fixture.mjs",
+    "docs:capture": "node scripts/capture-docs.mjs",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present"
   },
-  "dependencies": {
-    "@nestjs/platform-express": "^11.1.27"
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

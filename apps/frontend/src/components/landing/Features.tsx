@@ -1,36 +1,36 @@
 import { motion } from 'framer-motion'
-import { Radar, Gauge, Globe2, Bell, Route, Search } from 'lucide-react'
+import { Radar, Gauge, Globe2, Plane, Route, Search } from 'lucide-react'
 
 const FEATURES = [
   {
     icon: Radar,
-    title: 'Real-time tracking',
-    desc: 'Watch thousands of aircraft move across the map with live position updates every second.',
+    title: 'Live ADS-B positions',
+    desc: 'Aircraft positions from the OpenSky Network, refreshed continuously and smoothed between updates so movement stays fluid.',
   },
   {
     icon: Gauge,
-    title: 'Live telemetry',
-    desc: 'Altitude, ground speed, heading and vertical rate — streamed straight from the sky.',
+    title: 'Real telemetry',
+    desc: 'Altitude, ground speed, heading and vertical rate, exactly as broadcast by the aircraft transponder.',
   },
   {
     icon: Globe2,
-    title: 'Global coverage',
-    desc: 'From transatlantic crossings to regional hops, follow flights across 195 countries.',
+    title: 'Worldwide coverage',
+    desc: 'Every aircraft transmitting ADS-B within your viewport, from transatlantic crossings to regional hops.',
   },
   {
     icon: Route,
-    title: 'Full route playback',
-    desc: 'See the complete great-circle path, progress, and estimated time to arrival.',
+    title: 'Route context',
+    desc: 'The typical origin and destination for a callsign, drawn as a great-circle path with distance remaining.',
   },
   {
-    icon: Bell,
-    title: 'Smart alerts',
-    desc: 'Get notified on departure, delay, or landing for any flight you choose to follow.',
+    icon: Plane,
+    title: 'Aircraft details',
+    desc: 'Type, manufacturer, registration and operator resolved from the Mode-S address and cached for instant lookup.',
   },
   {
     icon: Search,
     title: 'Instant search',
-    desc: 'Find any flight by number, route, airline, or airport in milliseconds.',
+    desc: 'Filter thousands of live aircraft by callsign, registration, airline, or airport as you type.',
   },
 ]
 

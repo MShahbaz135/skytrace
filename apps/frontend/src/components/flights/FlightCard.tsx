@@ -1,15 +1,18 @@
-import { ArrowRight } from 'lucide-react'
-import type { Flight } from '@/data/flights'
+import { ArrowRight, Plane } from 'lucide-react'
+import type { AircraftView } from '@/lib/aircraft-view'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { cn, formatAltitude, formatSpeed } from '@/lib/utils'
 
 interface FlightCardProps {
-  flight: Flight
+  view: AircraftView
   active?: boolean
   onClick?: () => void
 }
 
-export function FlightCard({ flight, active, onClick }: FlightCardProps) {
+export function FlightCard({ view, active, onClick }: FlightCardProps) {
+  const route = view.route
+
   return (
     <button
       type="button"
@@ -22,34 +25,63 @@ export function FlightCard({ flight, active, onClick }: FlightCardProps) {
       )}
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-ink-700 text-lg">
-            {flight.airlineLogo}
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-ink-700 text-accent">
+            <Plane className="size-4.5" />
           </span>
-          <div>
-            <p className="font-mono text-sm font-semibold text-white">{flight.flightNumber}</p>
-            <p className="text-xs text-muted">{flight.airline}</p>
+          <div className="min-w-0">
+            <p className="truncate font-mono text-sm font-semibold text-white">{view.label}</p>
+            {view.enriched ? (
+              <p className="truncate text-xs text-muted">
+                {view.airlineName ?? view.operator ?? view.originCountry}
+              </p>
+            ) : (
+              <Skeleton className="mt-1 h-3 w-24" />
+            )}
           </div>
         </div>
-        <StatusBadge status={flight.status} />
+        <StatusBadge phase={view.phase} />
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <div className="text-center">
-          <p className="font-mono text-base font-bold text-white">{flight.origin.iata}</p>
-          <p className="text-[11px] text-muted">{flight.departureTime}</p>
-        </div>
+        {route ? (
+          <>
+            <div className="text-center">
+              <p className="font-mono text-base font-bold text-white">
+                {route.origin.iata ?? route.origin.icao}
+              </p>
+              <p className="max-w-20 truncate text-[11px] text-muted">
+                {route.origin.municipality ?? route.origin.countryIso}
+              </p>
+            </div>
 
-        <div className="flex flex-1 items-center px-3">
-          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-ink-500" />
-          <ArrowRight className="mx-1 size-3.5 text-muted-dim transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
-          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-ink-500" />
-        </div>
+            <div className="flex flex-1 items-center px-3">
+              <span className="h-px flex-1 bg-gradient-to-r from-transparent to-ink-500" />
+              <ArrowRight className="mx-1 size-3.5 text-muted-dim transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
+              <span className="h-px flex-1 bg-gradient-to-l from-transparent to-ink-500" />
+            </div>
 
-        <div className="text-center">
-          <p className="font-mono text-base font-bold text-white">{flight.destination.iata}</p>
-          <p className="text-[11px] text-muted">{flight.arrivalTime}</p>
-        </div>
+            <div className="text-center">
+              <p className="font-mono text-base font-bold text-white">
+                {route.destination.iata ?? route.destination.icao}
+              </p>
+              <p className="max-w-20 truncate text-[11px] text-muted">
+                {route.destination.municipality ?? route.destination.countryIso}
+              </p>
+            </div>
+          </>
+        ) : view.enriched ? (
+          // adsbdb resolves routes from published schedules, so unscheduled traffic
+          // legitimately has none. Fall back to telemetry rather than inventing one.
+          <div className="flex w-full items-center justify-between text-xs text-muted">
+            <span>{view.aircraftType ?? 'Route not published'}</span>
+            <span className="font-mono">
+              {formatAltitude(view.altitudeFt)} ft · {formatSpeed(view.speedKts)} kts
+            </span>
+          </div>
+        ) : (
+          <Skeleton className="h-4 w-full" />
+        )}
       </div>
     </button>
   )

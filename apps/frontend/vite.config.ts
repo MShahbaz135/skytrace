@@ -9,6 +9,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Resolved to source rather than the package's CommonJS build so the browser
+      // bundle stays ESM and edits to shared types hot-reload without a rebuild.
+      '@skytrace/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
     },
   },
 })
