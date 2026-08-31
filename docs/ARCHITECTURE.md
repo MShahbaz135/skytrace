@@ -348,5 +348,5 @@ SkyTrace is a live ADS-B map. The interesting part is not drawing planes — it 
 ## Related
 
 - [Root README](../README.md) — setup, env vars, scripts
-- Screenshots: [live](screenshots/live.png), [landing](screenshots/landing.png), [landing map](screenshots/landing-map.png)
+- Screenshots: [live](screenshots/live.png?v=2), [landing](screenshots/landing.png?v=2), [landing map](screenshots/landing-map.png?v=2)
 - Preview recording: [preview.gif](preview.gif)
