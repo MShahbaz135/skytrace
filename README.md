@@ -3,6 +3,7 @@
 Live ADS-B flight tracking: one shared OpenSky poller, a WebSocket fan-out, and a canvas map that keeps moving between updates.
 
 ![Live map](docs/screenshots/live.png)
+![Live map](docs/screenshots/live-zoomed.png)
 
 <p align="center">
   <img src="docs/preview.gif" alt="SkyTrace live map — aircraft moving across Western Europe" width="960" />
