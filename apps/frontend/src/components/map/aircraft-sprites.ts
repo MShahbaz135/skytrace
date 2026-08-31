@@ -62,41 +62,18 @@ export function getPlaneSprite(size: number, colour: string, glow: boolean): Spr
   return sprite
 }
 
-/** Low-zoom representation: a plain dot, since a rotated glyph is illegible at 4 pixels. */
-export function getDotSprite(radius: number, colour: string): Sprite {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  const key = `dot|${radius}|${colour}|${dpr}`
-  const cached = spriteCache.get(key)
-  if (cached) return cached
-
-  const extent = radius * 2 + 2
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(extent * dpr)
-  canvas.height = Math.ceil(extent * dpr)
-
-  const ctx = canvas.getContext('2d')
-  if (ctx) {
-    ctx.scale(dpr, dpr)
-    ctx.fillStyle = colour
-    ctx.beginPath()
-    ctx.arc(extent / 2, extent / 2, radius, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  const sprite: Sprite = { canvas, anchor: extent / 2 }
-  spriteCache.set(key, sprite)
-  return sprite
-}
-
 export interface LevelOfDetail {
-  kind: 'dot' | 'plane'
   size: number
 }
 
-/** Glyph detail scales with zoom: dots when the view is crowded, oriented planes when not. */
+/**
+ * Glyph size scales with zoom. Aircraft stay as oriented planes even when the view is
+ * pulled back to a continent or a long-haul route — dots made a selected flight look like
+ * it had disappeared.
+ */
 export function levelOfDetail(zoom: number): LevelOfDetail {
-  if (zoom < 5) return { kind: 'dot', size: 2.5 }
-  if (zoom < 7) return { kind: 'plane', size: 14 }
-  if (zoom < 9) return { kind: 'plane', size: 18 }
-  return { kind: 'plane', size: 24 }
+  if (zoom < 5) return { size: 22 }
+  if (zoom < 7) return { size: 28 }
+  if (zoom < 9) return { size: 36 }
+  return { size: 48 }
 }

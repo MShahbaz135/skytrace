@@ -54,6 +54,20 @@ export interface AircraftView {
   state: AircraftState
 }
 
+/** Tail number when known (e.g. A6-FKJ), otherwise the live callsign or Mode-S hex. */
+export function hoverLabel(tracked: TrackedAircraft): string {
+  const registration = tracked.enrichment?.aircraft?.registration?.trim()
+  if (registration) return registration.toUpperCase()
+  if (tracked.state.callsign) return tracked.state.callsign.toUpperCase()
+  return tracked.state.icao24.toUpperCase()
+}
+
+export function hoverLabels(aircraft: Map<string, TrackedAircraft>): Map<string, string> {
+  const labels = new Map<string, string>()
+  for (const [icao24, tracked] of aircraft) labels.set(icao24, hoverLabel(tracked))
+  return labels
+}
+
 export function toAircraftView(tracked: TrackedAircraft): AircraftView {
   const { state, enrichment } = tracked
   const aircraft = enrichment?.aircraft ?? null
