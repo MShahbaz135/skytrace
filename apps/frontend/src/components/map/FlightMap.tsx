@@ -1,8 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { normaliseBbox, type AircraftState, type Bbox } from '@skytrace/shared'
 import type { TrackedAircraft } from '@/hooks/useLiveAircraft'
+import { useVisitorRegion } from '@/hooks/useVisitorRegion'
+import type { MapView } from '@/lib/visitor-region'
 import type { PositionInterpolator } from '@/lib/interpolation'
 import { greatCirclePath } from '@/lib/geo'
 import { AircraftCanvasLayer } from './AircraftCanvasLayer'
@@ -14,6 +16,27 @@ function airportDot(colour: string) {
     iconSize: [10, 10],
     iconAnchor: [5, 5],
   })
+}
+
+/**
+ * Applies the visitor's country framing before the first paint of the viewport reporter,
+ * so the opening OpenSky query is already the right box.
+ */
+function InitialCountryView({ view }: { view: MapView }) {
+  const map = useMap()
+  const applied = useRef(false)
+
+  useLayoutEffect(() => {
+    if (applied.current) return
+    applied.current = true
+    if (view.bounds) {
+      map.fitBounds(view.bounds, { padding: [28, 28], maxZoom: 7, animate: false })
+      return
+    }
+    map.setView(view.center, view.zoom, { animate: false })
+  }, [map, view])
+
+  return null
 }
 
 /** Reports the visible area upward so the server can narrow its upstream query. */
@@ -46,13 +69,44 @@ function ViewportReporter({ onChange }: { onChange: (bbox: Bbox, zoom: number) =
 
 function FitToSelection({ selected }: { selected: TrackedAircraft | null }) {
   const map = useMap()
-  const route = selected?.enrichment?.route ?? null
+  const lastFitKey = useRef<string | null>(null)
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
+
   const icao24 = selected?.state.icao24 ?? null
+  const originIcao = selected?.enrichment?.route?.origin.icao ?? null
+  const destIcao = selected?.enrichment?.route?.destination.icao ?? null
+
+  // A wheel or drag during flyToBounds should keep the user's camera, not finish the animation.
+  useEffect(() => {
+    const interrupt = () => map.stop()
+    const container = map.getContainer()
+    container.addEventListener('wheel', interrupt, { passive: true })
+    container.addEventListener('touchstart', interrupt, { passive: true })
+    map.on('dragstart', interrupt)
+    return () => {
+      container.removeEventListener('wheel', interrupt)
+      container.removeEventListener('touchstart', interrupt)
+      map.off('dragstart', interrupt)
+    }
+  }, [map])
 
   useEffect(() => {
-    if (!selected) return
+    const current = selectedRef.current
+    if (!icao24 || !current) {
+      lastFitKey.current = null
+      return
+    }
 
-    const points: L.LatLngExpression[] = [[selected.state.lat, selected.state.lng]]
+    // Airport ICAOs, not the route object: enrichment is re-emitted on every viewport
+    // snapshot with a new object identity, which would otherwise re-trigger flyToBounds
+    // (maxZoom 6) and fight the user's zoom/pan.
+    const key = `${icao24}:${originIcao ?? ''}:${destIcao ?? ''}`
+    if (lastFitKey.current === key) return
+    lastFitKey.current = key
+
+    const points: L.LatLngExpression[] = [[current.state.lat, current.state.lng]]
+    const route = current.enrichment?.route
     if (route) {
       points.push([route.origin.lat, route.origin.lng])
       points.push([route.destination.lat, route.destination.lng])
@@ -63,10 +117,7 @@ function FitToSelection({ selected }: { selected: TrackedAircraft | null }) {
       duration: 0.8,
       maxZoom: route ? 6 : 8,
     })
-    // Re-running on every position update would fight the user's panning, so this keys
-    // off the selected aircraft and whether its route is known.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [icao24, route, map])
+  }, [icao24, originIcao, destIcao, map])
 
   return null
 }
@@ -124,6 +175,7 @@ export interface FlightMapProps {
   selectedId: string | null
   onSelect: (icao24: string | null) => void
   onViewportChange?: (bbox: Bbox, zoom: number) => void
+  labels?: Map<string, string>
   center?: [number, number]
   zoom?: number
   className?: string
@@ -136,15 +188,28 @@ export function FlightMap({
   selectedId,
   onSelect,
   onViewportChange,
-  center = [48, 8],
-  zoom = 5,
+  labels,
+  center,
+  zoom,
   className,
 }: FlightMapProps) {
+  const visitor = useVisitorRegion()
+  const view: MapView = {
+    center: center ?? visitor.view.center,
+    zoom: zoom ?? visitor.view.zoom,
+    bounds: center ? undefined : visitor.view.bounds,
+  }
+  const ready = center !== undefined || visitor.ready
+
+  if (!ready) {
+    return <div className={className} style={{ background: '#0a0e1a' }} />
+  }
+
   return (
     <div className={className}>
       <MapContainer
-        center={center}
-        zoom={zoom}
+        center={view.center}
+        zoom={view.zoom}
         minZoom={2}
         scrollWheelZoom
         worldCopyJump
@@ -152,6 +217,8 @@ export function FlightMap({
         className="size-full"
         style={{ background: '#0a0e1a' }}
       >
+        <InitialCountryView view={view} />
+
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -163,6 +230,7 @@ export function FlightMap({
           states={states}
           interpolator={interpolator}
           selectedId={selectedId}
+          labels={labels}
           onSelect={onSelect}
         />
 

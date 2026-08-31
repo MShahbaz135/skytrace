@@ -3,13 +3,7 @@ import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { derivePhase, type AircraftState } from '@skytrace/shared'
 import type { PositionInterpolator, Sample } from '@/lib/interpolation'
-import {
-  PHASE_COLOURS,
-  SELECTED_COLOUR,
-  getDotSprite,
-  getPlaneSprite,
-  levelOfDetail,
-} from './aircraft-sprites'
+import { PHASE_COLOURS, SELECTED_COLOUR, getPlaneSprite, levelOfDetail } from './aircraft-sprites'
 
 /** Pixels beyond the viewport edge that still get drawn, so glyphs slide in rather than pop. */
 const CULL_MARGIN_PX = 48
@@ -18,7 +12,9 @@ const CULL_MARGIN_PX = 48
 const GRID_CELL_PX = 64
 
 /** Maximum cursor distance that still counts as clicking an aircraft. */
-const HIT_RADIUS_PX = 18
+const HIT_RADIUS_PX = 32
+
+const EMPTY_LABELS = new Map<string, string>()
 
 interface GridEntry {
   icao24: string
@@ -30,6 +26,7 @@ interface LayerData {
   states: Map<string, AircraftState>
   interpolator: PositionInterpolator
   selectedId: string | null
+  labels: Map<string, string>
 }
 
 /**
@@ -53,6 +50,9 @@ class AircraftLayer extends L.Layer {
   private heightPx = 0
   private dpr = 1
   private hovering = false
+  private hoveredId: string | null = null
+  private lastMouse: { x: number; y: number } | null = null
+  private tooltip: HTMLDivElement | null = null
 
   private readonly onSelect: (icao24: string | null) => void
 
@@ -78,9 +78,15 @@ class AircraftLayer extends L.Layer {
     this.ctx = canvas.getContext('2d')
     map.getPanes().overlayPane.appendChild(canvas)
 
+    const tooltip = L.DomUtil.create('div', 'skytrace-aircraft-tooltip') as HTMLDivElement
+    tooltip.setAttribute('role', 'tooltip')
+    map.getPanes().overlayPane.appendChild(tooltip)
+    this.tooltip = tooltip
+
     map.on('zoomanim', this.handleZoomAnim, this)
     map.on('click', this.handleClick, this)
     map.on('mousemove', this.handleMouseMove, this)
+    map.on('mouseout', this.handleMouseOut, this)
 
     this.startLoop()
     return this
@@ -91,7 +97,10 @@ class AircraftLayer extends L.Layer {
     map.off('zoomanim', this.handleZoomAnim, this)
     map.off('click', this.handleClick, this)
     map.off('mousemove', this.handleMouseMove, this)
+    map.off('mouseout', this.handleMouseOut, this)
 
+    this.tooltip?.remove()
+    this.tooltip = null
     this.canvas?.remove()
     this.canvas = null
     this.ctx = null
@@ -189,16 +198,14 @@ class AircraftLayer extends L.Layer {
 
       const state = data.states.get(icao24)
       const colour = state ? PHASE_COLOURS[derivePhase(state)] : PHASE_COLOURS.cruising
-      this.drawGlyph(ctx, lod.kind, lod.size, colour, false, point.x, point.y, sample.heading)
+      this.drawGlyph(ctx, lod.size, colour, false, point.x, point.y, sample.heading)
     }
 
     // Drawn last so it is never hidden behind neighbouring traffic.
     if (selectedDraw) {
-      const selectedSize = lod.kind === 'dot' ? 5 : lod.size * 1.35
       this.drawGlyph(
         ctx,
-        lod.kind === 'dot' ? 'dot' : 'plane',
-        selectedSize,
+        lod.size * 1.35,
         SELECTED_COLOUR,
         true,
         selectedDraw.x,
@@ -206,11 +213,12 @@ class AircraftLayer extends L.Layer {
         selectedDraw.sample.heading,
       )
     }
+
+    this.syncHover()
   }
 
   private drawGlyph(
     ctx: CanvasRenderingContext2D,
-    kind: 'dot' | 'plane',
     size: number,
     colour: string,
     glow: boolean,
@@ -218,13 +226,6 @@ class AircraftLayer extends L.Layer {
     y: number,
     heading: number,
   ): void {
-    if (kind === 'dot') {
-      const sprite = getDotSprite(size, colour)
-      const extent = sprite.anchor * 2
-      ctx.drawImage(sprite.canvas, x - sprite.anchor, y - sprite.anchor, extent, extent)
-      return
-    }
-
     const sprite = getPlaneSprite(size, colour, glow)
     const extent = sprite.anchor * 2
 
@@ -280,14 +281,49 @@ class AircraftLayer extends L.Layer {
   }
 
   private handleMouseMove(event: L.LeafletMouseEvent): void {
+    this.lastMouse = { x: event.containerPoint.x, y: event.containerPoint.y }
+    this.syncHover()
+  }
+
+  private handleMouseOut(event: L.LeafletMouseEvent): void {
+    const related = event.originalEvent.relatedTarget as Node | null
+    if (related && this._map?.getContainer().contains(related)) return
+    this.lastMouse = null
+    this.syncHover()
+  }
+
+  /**
+   * Keeps the pointer cursor and callsign tooltip in sync with the aircraft under the
+   * cursor, including when a plane flies out from under a stationary pointer.
+   */
+  private syncHover(): void {
     const map = this._map
-    if (!map) return
+    const tooltip = this.tooltip
+    if (!map || !tooltip) return
 
-    const over = this.hitTest(event.containerPoint.x, event.containerPoint.y) !== null
-    if (over === this.hovering) return
+    const hit = this.lastMouse ? this.hitTest(this.lastMouse.x, this.lastMouse.y) : null
+    const over = hit !== null
+    if (over !== this.hovering) {
+      this.hovering = over
+      map.getContainer().style.cursor = over ? 'pointer' : ''
+    }
 
-    this.hovering = over
-    map.getContainer().style.cursor = over ? 'pointer' : ''
+    this.hoveredId = hit
+    if (!hit) {
+      tooltip.classList.remove('is-visible')
+      tooltip.textContent = ''
+      return
+    }
+
+    const state = this.data?.states.get(hit)
+    const sample = this.samples.get(hit)
+    tooltip.textContent = this.data?.labels.get(hit) ?? (state?.callsign || hit).toUpperCase()
+    tooltip.classList.add('is-visible')
+
+    if (sample) {
+      const point = map.latLngToLayerPoint([sample.lat, sample.lng])
+      L.DomUtil.setPosition(tooltip, point)
+    }
   }
 }
 
@@ -295,6 +331,7 @@ export interface AircraftCanvasLayerProps {
   states: Map<string, AircraftState>
   interpolator: PositionInterpolator
   selectedId: string | null
+  labels?: Map<string, string>
   onSelect: (icao24: string | null) => void
 }
 
@@ -302,6 +339,7 @@ export function AircraftCanvasLayer({
   states,
   interpolator,
   selectedId,
+  labels,
   onSelect,
 }: AircraftCanvasLayerProps) {
   const map = useMap()
@@ -323,8 +361,13 @@ export function AircraftCanvasLayer({
   // Pushed through a ref rather than React state: the render loop reads this every frame
   // and must not be coupled to the component's re-render cadence.
   useEffect(() => {
-    layerRef.current?.setData({ states, interpolator, selectedId })
-  }, [states, interpolator, selectedId])
+    layerRef.current?.setData({
+      states,
+      interpolator,
+      selectedId,
+      labels: labels ?? EMPTY_LABELS,
+    })
+  }, [states, interpolator, selectedId, labels])
 
   return null
 }

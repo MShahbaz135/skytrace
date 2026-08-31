@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Search, SlidersHorizontal, Plane, List, X } from 'lucide-react'
 import type { AircraftState, FlightPhase } from '@skytrace/shared'
 import { useLiveAircraft } from '@/hooks/useLiveAircraft'
-import { PHASE_META, PHASE_ORDER, matchesQuery, toAircraftView } from '@/lib/aircraft-view'
+import { PHASE_META, PHASE_ORDER, hoverLabels, matchesQuery, toAircraftView } from '@/lib/aircraft-view'
 import { FlightMap } from '@/components/map/FlightMap'
 import { FlightCard } from '@/components/flights/FlightCard'
 import { FlightDetailPanel } from '@/components/flights/FlightDetailPanel'
@@ -33,6 +33,8 @@ export function LivePage() {
     for (const [icao24, tracked] of aircraft) map.set(icao24, tracked.state)
     return map
   }, [aircraft])
+
+  const labels = useMemo(() => hoverLabels(aircraft), [aircraft])
 
   const matching = useMemo(() => {
     const views = []
@@ -153,6 +155,7 @@ export function LivePage() {
           interpolator={interpolator}
           selected={selectedTracked}
           selectedId={selectedId}
+          labels={labels}
           onSelect={handleSelect}
           onViewportChange={setViewport}
           className="size-full"

@@ -42,6 +42,8 @@ flowchart LR
 
 Positions render immediately. Aircraft type, airline, and typical route arrive a moment later and are cached.
 
+A longer walkthrough — flow, stack, APIs, code layout, and the challenges that shaped the design — is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ---
 
 ## Features
@@ -85,7 +87,7 @@ skytrace/
 │     └─ fixtures/       Replay snapshot used when OpenSky is down
 ├─ packages/shared/      Types and geo helpers used by both apps
 ├─ scripts/              Fixture recording, demo fixture, README capture
-└─ docs/                 Screenshots and preview recording
+└─ docs/                 Architecture walkthrough, screenshots, preview recording
 ```
 
 ---

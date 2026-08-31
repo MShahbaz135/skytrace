@@ -6,7 +6,7 @@ import type {
   FlightRoute,
 } from '@skytrace/shared'
 import type { TrackedAircraft } from '@/hooks/useLiveAircraft'
-import { matchesQuery, toAircraftView } from './aircraft-view'
+import { hoverLabel, matchesQuery, toAircraftView } from './aircraft-view'
 
 function airport(icao: string, iata: string, lat: number, lng: number): Airport {
   return {
@@ -243,5 +243,16 @@ describe('matchesQuery', () => {
     expect(matchesQuery(bare, 'baw117')).toBe(true)
     expect(matchesQuery(bare, 'united kingdom')).toBe(true)
     expect(matchesQuery(bare, 'british airways')).toBe(false)
+  })
+})
+
+describe('hoverLabel', () => {
+  it('prefers the tail number when enrichment has resolved it', () => {
+    expect(hoverLabel(tracked({ enrichment: enrichment(ROUTE) }))).toBe('G-STBA')
+  })
+
+  it('falls back to callsign, then the Mode-S address', () => {
+    expect(hoverLabel(tracked())).toBe('BAW117')
+    expect(hoverLabel(tracked({ state: state({ callsign: null }) }))).toBe('4008F2')
   })
 })
